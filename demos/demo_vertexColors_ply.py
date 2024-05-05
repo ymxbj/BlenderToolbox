@@ -2,62 +2,89 @@ import blendertoolbox as bt
 import bpy
 import os
 import numpy as np
+from mathutils import Vector
 cwd = os.getcwd()
+
+gpu_id = 7
+os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_id}"
+
+bpy.context.scene.render.engine = 'CYCLES'
+bpy.context.scene.cycles.device = 'GPU'
+bpy.context.preferences.addons["cycles"].preferences.get_devices()
+print(bpy.context.preferences.addons["cycles"].preferences.compute_device_type)
+for d in bpy.context.preferences.addons["cycles"].preferences.devices:
+    d["use"] = 1 # Using all devices, include GPU and CPU
+    print(d["name"], d["use"])
+bpy.context.preferences.addons["cycles"].preferences.compute_device_type = 'CUDA'
+device_type = bpy.context.preferences.addons['cycles'].preferences.compute_device_type
 
 """
 Warning: this function may be obsolete: please check out demo_vertexColors.py and demo_faceColors.py
 """
 
-outputPath = os.path.join(cwd, './demo_vertexColors_ply.png') # make it abs path for windows
-
 ## initialize blender
-imgRes_x = 480 
-imgRes_y = 480 
-numSamples = 100 
-exposure = 1.5 
-bt.blenderInit(imgRes_x, imgRes_y, numSamples, exposure)
+imgRes_x = 1080
+imgRes_y = 1080
+numSamples = 200
+exposure = 1.5
+
+category = 'rifle'
 
 ## read mesh (choose either readPLY or readOBJ)
-meshPath = '../meshes/spot.ply'
-location = (1.12, -0.14, 0) # (UI: click mesh > Transform > Location)
-rotation = (90, 0, 227) # (UI: click mesh > Transform > Rotation)
-scale = (1.5,1.5,1.5) # (UI: click mesh > Transform > Scale)
-mesh = bt.readMesh(meshPath, location, rotation, scale)
+location = (0, 0, 0.5) # (UI: click mesh > Transform > Location)
+rotation = (90, 0, eval(f'bt.{category}_azimuth')) # (UI: click mesh > Transform > Rotation)
+scale = (0.5, 0.5, 0.5) # (UI: click mesh > Transform > Scale)
 
-## set shading (uncomment one of them)
-bpy.ops.object.shade_smooth() 
+## read mesh (choose either readPLY or readOBJ)
 
-## subdivision
-bt.subdivision(mesh, level = 2)
+mesh_dir = f'/data/xiongbj/BlenderToolbox/display_{category}_ply'
 
-# # set material (TODO: this has some new issue due to new version of Blender)
-meshVColor = bt.colorObj([], 0.5, 1.0, 1.0, 0.0, 0.0)
-bt.setMat_VColor(mesh, meshVColor)
+output_dir = f'/data/xiongbj/BlenderToolbox/{category}_rgb_images'
 
+os.makedirs(output_dir, exist_ok = True)
 
-## set invisible plane (shadow catcher)
-bt.invisibleGround(shadowBrightness=0.9)
+meshes = os.listdir(mesh_dir)
 
-## set camera (recommend to change mesh instead of camera, unless you want to adjust the Elevation)
-camLocation = (3, 0, 2)
-lookAtLocation = (0,0,0.5)
-focalLength = 45 # (UI: click camera > Object Data > Focal Length)
-cam = bt.setCamera(camLocation, lookAtLocation, focalLength)
+for mesh in meshes:
 
-## set light
-lightAngle = (6, -30, -155) 
-strength = 2
-shadowSoftness = 0.3
-sun = bt.setLight_sun(lightAngle, strength, shadowSoftness)
+    bt.blenderInit(imgRes_x, imgRes_y, numSamples, exposure)
 
-## set ambient light
-bt.setLight_ambient(color=(0.1,0.1,0.1,1)) 
+    meshPath = os.path.join(mesh_dir, mesh)
 
-## set gray shadow to completely white with a threshold 
-bt.shadowThreshold(alphaThreshold = 0.05, interpolationMode = 'CARDINAL')
+    index = mesh[:-4]
 
-## save blender file so that you can adjust parameters in the UI
-bpy.ops.wm.save_mainfile(filepath=os.getcwd() + '/test.blend')
+    mesh = bt.readMesh(meshPath, location, rotation, scale)
 
-## save rendering
-bt.renderImage(outputPath, cam)
+    outputPath = os.path.join(output_dir, f'{index}.png')
+
+    # # set material (TODO: this has some new issue due to new version of Blender)
+    meshVColor = bt.colorObj([], 0.5, 1.0, 1.0, 0.0, 0.0)
+    bt.setMat_VColor(mesh, meshVColor)
+
+    bound = [bpy.context.object.matrix_world @ Vector(bbox_co[:]) for bbox_co in bpy.context.object.bound_box[:]]
+    ## set invisible plane (shadow catcher)
+    bt.invisibleGround(location = (0,0,bound[0].z - 0.03), shadowBrightness=0.9)
+
+    ## set camera (recommend to change mesh instead of camera, unless you want to adjust the Elevation)
+    camLocation = (3, 0, 2)
+    lookAtLocation = (0,0,0.5)
+    focalLength = 90 # (UI: click camera > Object Data > Focal Length)
+    cam = bt.setCamera(camLocation, lookAtLocation, focalLength)
+
+    ## set light
+    lightAngle = (6, -30, -155)
+    strength = 2
+    shadowSoftness = 0.3
+    sun = bt.setLight_sun(lightAngle, strength, shadowSoftness)
+
+    ## set ambient light
+    bt.setLight_ambient(color=(0.1,0.1,0.1,1))
+
+    ## set gray shadow to completely white with a threshold
+    bt.shadowThreshold(alphaThreshold = 0.05, interpolationMode = 'CARDINAL')
+
+    ## save blender file so that you can adjust parameters in the UI
+    bpy.ops.wm.save_mainfile(filepath=os.getcwd() + '/test.blend')
+
+    ## save rendering
+    bt.renderImage(outputPath, cam)

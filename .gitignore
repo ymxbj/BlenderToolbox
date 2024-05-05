@@ -17,3 +17,11 @@ myShapes/
 upload_to_pypi.sh
 build/*
 blendertoolbox.egg-info/*
+
+*airplane*/
+*chair*/
+*car*/
+*table*/
+*rifle*/
+*cow*/
+*novelty*/
